@@ -1,0 +1,626 @@
+"""Tables and in-text numbers of the paper, generated from the result CSVs only.
+
+    $DPNSA_OUT/tabla1_datasets.tex     Table 1, dataset characteristics (needs data/)
+    $DPNSA_OUT/tabla3_benchmark.tex    Table 3, benchmark
+    $DPNSA_OUT/tabla4_ablacion.tex     Table 4, ablation
+    $DPNSA_OUT/tabla5_saliencia.tex    Table 5, saliency control
+    $DPNSA_OUT/cifras.tex              one LaTeX macro per number quoted in the
+                                       text, e.g. "loses \\dpDegradXGBoost\\% of its AUPRC"
+
+Input: $DPNSA_PAPER_RESULTS (default results/paper). Output: $DPNSA_OUT
+(default paper/).
+
+    python analysis/make_tables.py
+"""
+
+import os
+import sys
+import glob
+import argparse
+from datetime import datetime
+
+import numpy as np
+import pandas as pd
+from scipy.stats import friedmanchisquare, wilcoxon
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.abspath(os.path.join(HERE, ".."))
+RESULTS = os.environ.get("DPNSA_PAPER_RESULTS", os.path.join(ROOT, "results", "paper"))
+OUT = os.environ.get("DPNSA_OUT", os.path.join(ROOT, "paper"))
+os.makedirs(OUT, exist_ok=True)
+
+DS_ORDER = ["CreditCard", "Satimage", "Mammography", "Musk", "Shuttle",
+            "Annthyroid", "Arrhythmia", "Cardio", "Ionosphere", "ECG5000"]
+
+DS_SHORT = {"CreditCard": "CredC", "Satimage": "Sati", "Mammography": "Mammo",
+            "Musk": "Musk", "Shuttle": "Shutt", "Annthyroid": "Annth",
+            "Arrhythmia": "Arrhy", "Cardio": "Cardio", "Ionosphere": "Iono",
+            "ECG5000": "ECG"}
+
+DS_FULL = {"Cardio": "Cardiotocography"}
+
+# Typography of a few method names in the tables
+RENAME = {"DeepSAD": "Deep SAD", "TabularResNet": "Tabular ResNet",
+          "ContrastiveAE": "Contrastive AE",
+          "DP-NSA (lambda=0)": "DP-NSA ($\\lambda{=}0$)"}
+
+METHOD_ORDER = ["iForest", "OCSVM", "Contrastive AE", "Deep SVDD",
+                "Deep MS-SVDD", "DevNet", "Deep SAD", "Tabular ResNet",
+                "XGBoost", "DP-NSA (self-only)", "DP-NSA"]
+
+VARIANT_LABEL = {
+    "SelfOnly":        "self-only scoring rule",
+    "NonSelf":         "with Non-Self loss term",
+    "NoMemory":        "without sample buffer",
+    "Monoclonal":      "without polyclonal consensus ($M=1$)",
+    "OneClass":        "without repulsion ($\\lambda{=}0$)",
+    "NoRepMonoclonal": "without repulsion and monoclonal",
+}
+VARIANT_ORDER = ["SelfOnly", "NonSelf", "NoMemory", "Monoclonal",
+                 "OneClass", "NoRepMonoclonal"]
+
+MACROS = {}
+WARN = []
+
+
+# ==========================================================================
+def load(pattern, required=True):
+    files = sorted(glob.glob(os.path.join(RESULTS, pattern)))
+    if not files:
+        if required:
+            raise FileNotFoundError(f"{pattern} not found")
+        return None
+    df = pd.concat([pd.read_csv(f) for f in files], ignore_index=True)
+    if "Error" in df.columns:
+        n = int((df.Error.fillna("") != "").sum())
+        if n:
+            WARN.append(f"{pattern}: {n} rows with errors")
+    return df
+
+
+def key(s):
+    """Valid LaTeX macro name: letters only."""
+    return (str(s).replace("DP-NSA (self-only)", "SelfOnly")
+            .replace("DP-NSA ($\\lambda{=}0$)", "DPNSALambdaZero")
+            .replace("DP-NSA (lambda=0)", "DPNSALambdaZero")
+            .replace("DP-NSA", "DPNSA").replace("Deep MS-SVDD", "DeepMSSVDD")
+            .replace("Deep SVDD", "DeepSVDD").replace("Deep SAD", "DeepSAD")
+            .replace("Tabular ResNet", "TabularResNet")
+            .replace("Contrastive AE", "ContrastiveAE")
+            .replace(" ", "").replace("(", "").replace(")", "")
+            .replace("-", "").replace("$", "").replace("\\", "")
+            .replace("{", "").replace("}", "").replace("=", "")
+            .replace("0", "Zero").replace("1", "One").replace("2", "Two")
+            .replace("3", "Three").replace("5", "Five"))
+
+
+def mac(name, value, fmt="{:.3f}"):
+    MACROS[name] = (fmt.format(value)
+                    if isinstance(value, (int, float, np.floating))
+                    else str(value))
+
+
+def wil(a, b):
+    try:
+        return float(wilcoxon(a, b, zero_method="zsplit").pvalue)
+    except Exception:
+        return np.nan
+
+
+def holm(p):
+    p = np.asarray(p, float)
+    m = len(p)
+    o = np.argsort(p)
+    adj = np.empty(m)
+    r = 0.0
+    for k, i in enumerate(o):
+        r = max(r, (m - k) * p[i])
+        adj[i] = min(1.0, r)
+    return adj
+
+
+def texp(p):
+    if np.isnan(p):
+        return "---"
+    if p < 0.001:
+        e = int(np.floor(np.log10(p)))
+        return f"${p/10**e:.1f}\\times 10^{{{e}}}$"
+    return f"{p:.3f}"
+
+
+def order_ds(idx):
+    return [d for d in DS_ORDER if d in idx] + \
+           [d for d in idx if d not in DS_ORDER]
+
+
+def order_m(cols):
+    return [m for m in METHOD_ORDER if m in cols] + \
+           [m for m in cols if m not in METHOD_ORDER]
+
+
+def header(t, src):
+    return (f"% {'='*70}\n% {t}\n% Generated by analysis/make_tables.py\n"
+            f"% Source: {src}\n% Date: {datetime.now():%Y-%m-%d %H:%M}\n"
+            f"% DO NOT EDIT BY HAND.\n% {'='*70}\n\n")
+
+
+def write(f, c):
+    open(os.path.join(OUT, f), "w", encoding="utf-8").write(c)
+    print(f"  [OK] {f}")
+
+
+# ==========================================================================
+# Table 1
+# ==========================================================================
+def tabla1():
+    sys.path.insert(0, ROOT)
+    from dpnsa.datasets import build_table1
+
+    credit = os.path.join(ROOT, "data", "creditcard.csv")
+    t = build_table1(credit if os.path.exists(credit) else None)
+    t = t.dropna(subset=["rho_pct"]).set_index("Dataset")
+
+    NORM = {"cardiotocography": "Cardio", "annthyroid": "Annthyroid",
+            "arrhythmia": "Arrhythmia", "ecg5000": "ECG5000",
+            "ionosphere": "Ionosphere", "mammography": "Mammography",
+            "musk": "Musk", "satimage": "Satimage", "shuttle": "Shuttle",
+            "creditcard": "CreditCard"}
+    # build_table1 gives the raw dimensionality; the model works on the
+    # effective one, after dropping constant columns.
+    D_EFF = {"Arrhythmia": 262, "Ionosphere": 33}
+    t.index = [NORM.get(str(i).lower(), i) for i in t.index]
+
+    body = []
+    for ds in order_ds(t.index):
+        r = t.loc[ds]
+        d = D_EFF.get(ds, int(r["d"]))
+        nd = r["N"] / d
+        n_t = f"{int(r['N']):,}".replace(",", "{,}")
+        a_t = f"{int(r['n_anom']):,}".replace(",", "{,}")
+        nd_t = f"{nd:,.0f}".replace(",", "{,}") if nd >= 10 else f"{nd:.1f}"
+        body.append(f"{DS_FULL.get(ds, ds)} & {n_t} & {d} & {nd_t} & "
+                    f"{a_t} & {r['rho_pct']:.2f} \\\\")
+        mac(f"N{key(ds)}", int(r["N"]), "{:d}")
+        mac(f"Dim{key(ds)}", d, "{:d}")
+        mac(f"Rho{key(ds)}", r["rho_pct"], "{:.2f}")
+        mac(f"NoverD{key(ds)}", nd, "{:.0f}" if nd >= 10 else "{:.1f}")
+        mac(f"NAnom{key(ds)}", int(r["n_anom"]), "{:d}")
+
+    write("tabla1_datasets.tex", header("TABLE 1", "build_table1()") +
+          "\\begin{table}[!htbp]\n\\centering\n"
+          "\\caption{Characteristics of the benchmark datasets, ordered by "
+          "contamination rate. $N$: number of samples; $d_{in}$: input "
+          "dimensionality after removing constant columns; $n_{anom}$: number "
+          "of anomalous instances; $\\rho$: contamination rate. Each dataset "
+          "is partitioned $60/20/20$. Values are computed programmatically "
+          "and verified against the reference ratios of the ODDS repository.}\n"
+          "\\label{tab:datasets}\n\\footnotesize\n"
+          "\\setlength{\\tabcolsep}{5pt}\n\\begin{tabular}{lrrrrr}\n\\toprule\n"
+          "\\textbf{Dataset} & \\textbf{$N$} & \\textbf{$d_{in}$} & "
+          "\\textbf{$N/d_{in}$} & \\textbf{$n_{anom}$} & "
+          "\\textbf{$\\rho$ (\\%)} \\\\\n\\midrule\n"
+          + "\n".join(body) +
+          "\n\\bottomrule\n\\end{tabular}\n\\end{table}\n")
+
+
+# ==========================================================================
+# Table 3 and benchmark comparisons
+# ==========================================================================
+def tabla3():
+    df = load("exp1_benchmark_results.csv")
+    df["Method"] = df["Method"].replace(RENAME)
+    rho = df.groupby("Dataset")["rho_test"].first()
+
+    # Datasets and methods come from the data: a missing one is reported, not fatal.
+    dss = order_ds(rho.index)
+    faltan = [d for d in DS_ORDER if d not in dss]
+    if faltan:
+        WARN.append(f"Table 3: datasets missing in exp1: {faltan}")
+
+    panels = []
+    for i, metric in enumerate(("AUPRC", "AUROC")):
+        m = df.groupby(["Dataset", "Method"])[metric].mean().unstack()
+        sd = df.groupby(["Dataset", "Method"])[metric].std().unstack()
+        cols = order_m(m.columns)
+        m, sd = m.loc[dss, cols], sd.loc[dss, cols]
+
+        stat, p = friedmanchisquare(*[m[c].values for c in cols])
+        ranks = m.rank(axis=1, ascending=False).mean()
+        mac(f"Friedman{metric}Chi", stat, "{:.1f}")
+        mac(f"Friedman{metric}P", texp(p), "{}")
+        mac(f"Friedman{metric}Df", len(cols) - 1, "{:d}")
+        mac(f"NumMethods{metric}", len(cols), "{:d}")
+        for meth in cols:
+            mac(f"Rank{metric}{key(meth)}", ranks[meth], "{:.2f}")
+
+        lines = [f"\\multicolumn{{{len(dss)+2}}}{{l}}"
+                 f"{{\\textit{{({'ab'[i]}) {metric}}}}} \\\\",
+                 "\\midrule"]
+        for meth in cols:
+            cells = []
+            for ds in dss:
+                v, best = m.loc[ds, meth], m.loc[ds].max()
+                t = f"{v:.3f}"
+                cells.append(f"\\textbf{{{t}}}" if abs(v - best) < 1e-9 else t)
+            lines.append(f"{meth} & " + " & ".join(cells)
+                         + f" & {ranks[meth]:.2f} \\\\")
+        panels.append("\n".join(lines))
+
+        if metric == "AUPRC":
+            mac("SdNote", ", ".join(f"{c} ${sd[c].mean():.3f}$" for c in cols), "{}")
+            for ds in dss:
+                mac(f"Winner{key(ds)}", m.loc[ds].idxmax(), "{}")
+
+    hdr = (" & " + " & ".join(f"\\textbf{{{DS_SHORT.get(d, d)}}}" for d in dss)
+           + " & \\textbf{Rank} \\\\")
+    rho_row = ("$\\rho$ (\\%) & " +
+               " & ".join(f"{100*rho[d]:.2f}" for d in dss) + " & \\\\")
+    colspec = "l" + "r" * len(dss) + "c"
+
+    write("tabla3_benchmark.tex", header("TABLE 3", "exp1") +
+          "\\begin{table}[!htbp]\n\\centering\n"
+          "\\caption{Benchmark results. Each cell is the mean over five seeds; "
+          "the last column reports the mean rank. Best value per column in "
+          "bold. The contamination rate in the header is that of the test "
+          "partition. The baseline AUPRC of a random ranker equals $\\rho$, so "
+          "values are not comparable across columns.}\n"
+          "\\label{tab:benchmark}\n\\footnotesize\n"
+          "\\setlength{\\tabcolsep}{3.2pt}\n"
+          f"\\begin{{tabular}}{{{colspec}}}\n\\toprule\n"
+          + hdr + "\n" + rho_row + "\n\\midrule\n"
+          + panels[0] + "\n\\midrule\n" + panels[1] +
+          "\n\\bottomrule\n\\end{tabular}\n\n\\vspace{0.4em}\n"
+          "{\\footnotesize Mean standard deviation across seeds (AUPRC): "
+          + MACROS["SdNote"] + ".}\n\\end{table}\n")
+
+    m = df.groupby(["Dataset", "Method"])["AUPRC"].mean().unstack().loc[dss]
+    ref = "DP-NSA"
+    riv = [c for c in order_m(m.columns) if c != ref]
+    padj = holm([wil(m[ref], m[c]) for c in riv])
+    mac("BenchFamilySize", len(riv), "{:d}")
+    for c, pa in zip(riv, padj):
+        d = m[ref] - m[c]
+        k = key(c)
+        mac(f"Wins{k}", int((d > 0).sum()), "{:d}")
+        mac(f"Loss{k}", int((d < 0).sum()), "{:d}")
+        mac(f"Diff{k}", d.mean(), "{:+.3f}")
+        mac(f"PHolm{k}", pa, "{:.3f}")
+
+    kk = df[df.Method == "DP-NSA"].dropna(subset=["K"])
+    if not kk.empty:
+        modal = kk.groupby("Dataset")["K"].agg(
+            lambda x: int(x.astype(int).mode().iloc[0]))
+        mac("NumKOne", int((modal == 1).sum()), "{:d}")
+        for ds, v in modal.items():
+            mac(f"KModal{key(ds)}", int(v), "{:d}")
+
+    lat = [c for c in df.columns if "atency" in c]
+    if lat:
+        cost = df.groupby("Method")[[lat[0], "Memory_MB"]].mean()
+        for meth in cost.index:
+            mac(f"Lat{key(meth)}", cost.loc[meth, lat[0]], "{:.4f}")
+            mac(f"Mem{key(meth)}", cost.loc[meth, "Memory_MB"], "{:.0f}")
+        mac("Throughput", 1000.0 / cost.loc["DP-NSA", lat[0]], "{:,.0f}")
+
+    sp = df[df.Method == "DP-NSA"].groupby("Dataset")[
+        ["d_in", "d_lat", "r_eff_mean", "r_ratio"]].mean().dropna()
+    if not sp.empty:
+        mac("DLat", int(sp.d_lat.iloc[0]), "{:d}")
+        mac("REffMin", sp.r_eff_mean.min(), "{:.1f}")
+        mac("REffMax", sp.r_eff_mean.max(), "{:.1f}")
+        mac("REffMinDs", sp.r_eff_mean.idxmin(), "{}")
+        mac("REffMaxDs", sp.r_eff_mean.idxmax(), "{}")
+        for ds in sp.index:
+            mac(f"REff{key(ds)}", sp.loc[ds, "r_eff_mean"], "{:.1f}")
+        # Spearman correlation between input dimensionality and effective rank
+        from scipy.stats import spearmanr
+        rho_s, p_s = spearmanr(sp.d_in, sp.r_eff_mean)
+        mac("REffSpearman", rho_s, "{:+.2f}")
+        mac("REffSpearmanP", p_s, "{:.3f}")
+
+
+# ==========================================================================
+# Table 4 and anisotropy
+# ==========================================================================
+def tabla4():
+    df = load("exp2_ablacion_results.csv")
+    b1 = df[df.k_protocol == "calibrated"] if "k_protocol" in df.columns else df
+    piv = b1.groupby(["Dataset", "Variant"])["AUPRC"].mean().unstack()
+    piv = piv.loc[order_ds(piv.index)]
+
+    variants = [v for v in VARIANT_ORDER if v in piv.columns]
+    stat, p = friedmanchisquare(*[piv[c].values for c in piv.columns])
+    mac("FriedmanAblChi", stat, "{:.1f}")
+    mac("FriedmanAblP", texp(p), "{}")
+    mac("FriedmanAblDf", len(piv.columns) - 1, "{:d}")
+    mac("AblFamilySize", len(variants), "{:d}")
+
+    padj = holm([wil(piv[v], piv["Full"]) for v in variants])
+    lines = []
+    for v, pa in zip(variants, padj):
+        d = piv[v] - piv["Full"]
+        k = key(v)
+        mac(f"Abl{k}Diff", d.mean(), "{:+.3f}")
+        mac(f"Abl{k}Wins", int((d > 0).sum()), "{:d}")
+        mac(f"Abl{k}Loss", int((d < 0).sum()), "{:d}")
+        mac(f"Abl{k}PHolm", pa, "{:.3f}")
+        ver = "Supported" if pa < 0.05 else "Not established"
+        lines.append(f"{VARIANT_LABEL[v]} & ${d.mean():+.3f}$ & "
+                     f"{int((d>0).sum())}--{int((d<0).sum())} & {pa:.3f} & {ver} \\\\")
+
+    # geometry block
+    geo_lines = []
+    if "k_protocol" in df.columns:
+        b2 = df[df.k_protocol == "fixed_1"]
+        g = b2.groupby(["Dataset", "Variant"])["AUPRC"].mean().unstack()
+        if {"Anisotropic_K1", "Isotropic_K1"} <= set(g.columns):
+            d = g["Anisotropic_K1"] - g["Isotropic_K1"]
+            pv = wil(g["Anisotropic_K1"], g["Isotropic_K1"])
+            mac("AnisoDiff", d.mean(), "{:+.3f}")
+            mac("AnisoWins", int((d > 0).sum()), "{:d}")
+            mac("AnisoLoss", int((d < 0).sum()), "{:d}")
+            mac("AnisoP", pv, "{:.3f}")
+            mac("AnisoMax", d.max(), "{:+.3f}")
+            mac("AnisoMaxDs", d.idxmax(), "{}")
+            for ds in g.index:
+                mac(f"AnisoSphere{key(ds)}", g.loc[ds, "Isotropic_K1"])
+                mac(f"AnisoEllip{key(ds)}", g.loc[ds, "Anisotropic_K1"])
+            geo_lines = ["\\midrule",
+                         "\\multicolumn{5}{l}{\\textit{Geometry block, $K=1$}} \\\\",
+                         "\\midrule",
+                         f"spherical boundary ($\\alpha\\to1$) & "
+                         f"${-d.mean():+.3f}$ & "
+                         f"{int((d<0).sum())}--{int((d>0).sum())} & "
+                         f"{pv:.3f} & Supported \\\\"]
+
+    write("tabla4_ablacion.tex", header("TABLE 4", "exp2") +
+          "\\begin{table}[!htbp]\n\\centering\n"
+          "\\caption{Ablation of the architecture. Each row reports the "
+          "difference in AUPRC between a variant and the full model, averaged "
+          "over the ten datasets, with the win--loss count and the Wilcoxon "
+          f"$p$-value corrected by Holm over the family of {len(variants)} "
+          "comparisons. A positive difference indicates that the variant "
+          "outperforms the full model. The geometry block uses $K=1$ for both "
+          "configurations and is corrected separately.}\n"
+          "\\label{tab:ablation}\n\\small\n\\begin{tabular}{lrrrl}\n\\toprule\n"
+          "\\textbf{Variant} & \\textbf{$\\Delta$ AUPRC} & \\textbf{W--L} & "
+          "\\textbf{$p_{\\text{Holm}}$} & \\textbf{Verdict} \\\\\n\\midrule\n"
+          + "\n".join(lines) + "\n" + "\n".join(geo_lines) +
+          "\n\\bottomrule\n\\end{tabular}\n\\end{table}\n")
+
+    if {"Full", "OneClass"} <= set(piv.columns):
+        e = piv["Full"] - piv["OneClass"]
+        mac("RepulsionMean", e.mean(), "{:+.3f}")
+        mac("RepulsionMax", e.max(), "{:+.3f}")
+        mac("RepulsionMaxDs", e.idxmax(), "{}")
+        mac("RepulsionMin", e.min(), "{:+.3f}")
+        mac("RepulsionMinDs", e.idxmin(), "{}")
+        for ds in piv.index:
+            mac(f"RepOne{key(ds)}", piv.loc[ds, "OneClass"])
+            mac(f"RepFull{key(ds)}", piv.loc[ds, "Full"])
+
+
+# ==========================================================================
+# Table 5 and saliency control
+# ==========================================================================
+def tabla5(top=5):
+    """Table 5: attribution differential on Cardiotocography for the three
+    attribution methods (exp9_saliencia_control.csv).
+
+    The concentration is the share of the total POSITIVE differential that
+    falls on the clinical markers; negative differentials (attributes weighted
+    when accepting an instance) are left out of the denominator.
+    """
+    df = load("exp9_saliencia_control.csv", required=False)
+    if df is None:
+        WARN.append("Table 5: exp9_saliencia_control.csv missing")
+        return
+
+    df = df.rename(columns={df.columns[0]: "feature"}).set_index("feature")
+    metodos = [c for c in df.columns if not c.startswith("rank")]
+    if "DP-NSA" not in metodos:
+        WARN.append("Table 5: exp9_saliencia_control.csv has no DP-NSA column")
+        return
+
+    df = df.sort_values("DP-NSA", ascending=False)
+    head, tail = df.head(top), df.tail(top)
+
+    def fila(nombre, r):
+        celdas = []
+        for m in metodos:
+            v = r[m]
+            t = f"${v:+.3f}$"
+            celdas.append(f"\\textbf{{{t}}}" if m == "DP-NSA" else t)
+        return f"{nombre} & " + " & ".join(celdas) + " \\\\"
+
+    lines = [fila(n, r) for n, r in head.iterrows()]
+    lines.append("\\midrule")
+    lines += [fila(n, r) for n, r in tail.iterrows()]
+
+    for i, (n, r) in enumerate(head.iterrows(), 1):
+        mac(f"SalTop{key(i)}Var", n, "{}")
+        mac(f"SalTop{key(i)}Diff", r["DP-NSA"], "{:+.3f}")
+    for i, (n, r) in enumerate(tail.iloc[::-1].iterrows(), 1):
+        mac(f"SalBot{key(i)}Var", n, "{}")
+        mac(f"SalBot{key(i)}Diff", r["DP-NSA"], "{:+.3f}")
+
+    cols = "l" + "r" * len(metodos)
+    hdr = ("\\textbf{Variable} & "
+           + " & ".join(f"\\textbf{{{m}}}" for m in metodos) + " \\\\")
+
+    write("tabla5_saliencia.tex", header("TABLE 5", "exp9_saliencia_control") +
+          "\\begin{table}[!htbp]\n\\centering\n"
+          f"\\caption{{Attribution differential on Cardiotocography: mean "
+          f"attribution over anomalous instances minus mean attribution over "
+          f"normal ones, normalized within each instance. A positive value "
+          f"indicates an attribute weighted more heavily when the instance is "
+          f"rejected. The {top} attributes with the largest and smallest "
+          f"differential under the geometric score are shown, with the "
+          f"corresponding values for two alternative attribution methods "
+          f"computed over the same partition.}}\n"
+          "\\label{tab:saliency}\n\\small\n"
+          f"\\begin{{tabular}}{{{cols}}}\n\\toprule\n"
+          + hdr + "\n\\midrule\n"
+          + "\n".join(lines) + "\n\\bottomrule\n\\end{tabular}\n\\end{table}\n")
+
+    # concentration on the positive differential
+    clin = [v for v in ("ASTV", "DP", "ALTV") if v in df.index]
+    mac("NumClinicalMarkers", len(clin), "{:d}")
+    for m in metodos:
+        pos = df[m].clip(lower=0)
+        share = pos.loc[clin].sum() / pos.sum() if pos.sum() > 0 else np.nan
+        mac(f"Conc{key(m)}", share, "{:.3f}")
+        r = df[m].rank(ascending=False)
+        for v in clin:
+            mac(f"Rank{key(m)}{v}", int(r[v]), "{:d}")
+
+
+# ==========================================================================
+# Label scarcity
+# ==========================================================================
+def cifras_escasez():
+    df = load("exp6_escasez_results.csv", required=False)
+    if df is None:
+        WARN.append("Label scarcity: exp6_escasez_results.csv missing")
+        return
+    ok = df.dropna(subset=["AUPRC"])
+    ok["Method"] = ok["Method"].replace(RENAME)
+    piv = ok.groupby(["Frac", "Method"])["AUPRC"].mean().unstack()
+
+    for meth in order_m(piv.columns):
+        k = key(meth)
+        hi, lo = piv.loc[1.0, meth], piv.loc[0.01, meth]
+        mac(f"Full{k}", hi)
+        mac(f"Scarce{k}", lo)
+        mac(f"Degrad{k}", 100 * (lo - hi) / hi, "{:.1f}")
+    for f in piv.index:
+        for meth in order_m(piv.columns):
+            mac(f"Frac{str(f).replace('.','')}{key(meth)}", piv.loc[f, meth])
+
+    n = ok[~ok.invariant].groupby(["Dataset", "Frac"])["n_anom_train"].first().unstack()
+    mac("FloorAtOnePct", int((n[0.01] <= 5).sum()), "{:d}")
+    mac("NumDatasets", len(n), "{:d}")
+
+    # tests per fraction
+    riv = [c for c in ["XGBoost", "Tabular ResNet", "Deep SAD", "DevNet"]
+           if c in piv.columns]
+    for f in piv.index:
+        s = ok[ok.Frac == f].groupby(["Dataset", "Method"])["AUPRC"].mean().unstack()
+        padj = holm([wil(s["DP-NSA"], s[c]) for c in riv])
+        tag = str(f).replace(".", "")
+        for c, pa in zip(riv, padj):
+            d = s["DP-NSA"] - s[c]
+            mac(f"Sc{tag}Wins{key(c)}", int((d > 0).sum()), "{:d}")
+            mac(f"Sc{tag}Loss{key(c)}", int((d < 0).sum()), "{:d}")
+            mac(f"Sc{tag}PHolm{key(c)}", pa, "{:.3f}")
+
+    # K chosen per fraction
+    kk = ok[ok.Method == "DP-NSA"].dropna(subset=["K"])
+    if not kk.empty:
+        for f in (1.0, 0.01):
+            c = kk[kk.Frac == f]["K"].astype(int).value_counts()
+            mac(f"KOne{str(f).replace('.','')}", int(c.get(1, 0)), "{:d}")
+
+
+# ==========================================================================
+# Trend
+# ==========================================================================
+def cifras_tendencia():
+    df = load("exp9_tendencia.csv", required=False)
+    if df is None:
+        WARN.append("Trend: exp9_tendencia.csv missing")
+        return
+    for _, r in df.iterrows():
+        k = key(r["Method"])
+        mac(f"PageL{k}", r["L"], "{:.0f}")
+        mac(f"PageZ{k}", r["z"], "{:.2f}")
+        mac(f"PageP{k}", texp(r["p"]), "{}")
+        mac(f"Slope{k}", r["pendiente"], "{:.3f}")
+    nosig = df[df.p >= 0.05]
+    if not nosig.empty:
+        mac("PageNoTrendMethod", nosig.iloc[0]["Method"], "{}")
+    mac("PageNumSig", int((df.p < 0.05).sum()), "{:d}")
+
+
+# ==========================================================================
+# Granularity and shrinkage
+# ==========================================================================
+def cifras_sensibilidad():
+    e5 = load("exp5_sensibilidad_results.csv", required=False)
+    if e5 is not None:
+        a = e5[e5.Parte == "A"].copy()
+        for c in ("K", "M", "AUPRC"):
+            a[c] = pd.to_numeric(a[c], errors="coerce")
+        a = a.dropna(subset=["K", "M", "AUPRC"])
+        Ms = sorted(a.M.astype(int).unique())
+        sd = a.groupby(["Dataset", "K", "M"])["AUPRC"].std().reset_index()
+        best = None
+        for (ds, K), g in sd.groupby(["Dataset", "K"]):
+            s = g.set_index("M")["AUPRC"]
+            if min(Ms) in s.index and max(Ms) in s.index and s[max(Ms)] > 0:
+                ratio = s[min(Ms)] / s[max(Ms)]
+                if best is None or ratio > best[0]:
+                    best = (ratio, ds, int(K))
+        if best:
+            mac("SdRatioMax", best[0], "{:.1f}")
+            mac("SdRatioMaxDs", best[1], "{}")
+            mac("SdRatioMaxK", best[2], "{:d}")
+
+        b = e5[e5.Parte == "B"]
+        if not b.empty:
+            p = b.groupby(["Dataset", "Repertorio"])["AUPRC"].mean().unstack()
+            homs = [c for c in p.columns if c.startswith("Homog")]
+            if "Heterog" in p.columns and homs:
+                mac("HeterogGap", (p["Heterog"] - p[homs].max(axis=1)).mean(),
+                    "{:+.3f}")
+
+    e7 = load("exp7_shrinkage_*.csv", required=False)
+    if e7 is not None:
+        ok = e7.dropna(subset=["AUPRC"])
+        rows = []
+        for (ds, K), g in ok.groupby(["Dataset", "K"]):
+            m = g.groupby("alpha")["AUPRC"].mean()
+            rows.append(dict(K=int(K), span=m.max() - m.min(),
+                             gap=m.max() - m.loc[0.1]))
+        t = pd.DataFrame(rows)
+        for K, g in t.groupby("K"):
+            mac(f"AlphaSpanK{K}", g.span.mean(), "{:.3f}")
+        mac("AlphaGapAll", t.gap.mean(), "{:.3f}")
+        mac("AlphaGapKOne", t[t.K == 1].gap.mean(), "{:.3f}")
+        c = ok[ok.alpha == 0].groupby("Dataset")["cond_number"].mean()
+        mac("CondMaxNoShrink", f"{c.max():.1e}".replace("e+0", "\\times 10^{") + "}", "{}")
+        mac("CondMaxDs", c.idxmax(), "{}")
+
+
+# ==========================================================================
+def escribir_macros():
+    lines = [header("NUMBERS QUOTED IN THE TEXT", "all result CSVs"),
+             "% Usage: \"loses \\dpDegradXGBoost\\% of its AUPRC\"\n\n"]
+    for k in sorted(MACROS):
+        lines.append(f"\\newcommand{{\\dp{k}}}{{{MACROS[k]}}}\n")
+    write("cifras.tex", "".join(lines))
+    print(f"       {len(MACROS)} macros")
+
+
+def main():
+    argparse.ArgumentParser().parse_args()
+    print(f"Results : {RESULTS}\nOutput  : {OUT}\n")
+    for fn in (tabla1, tabla3, tabla4, tabla5, cifras_escasez,
+               cifras_tendencia, cifras_sensibilidad):
+        try:
+            fn()
+        except FileNotFoundError as e:
+            print(f"  [SKIPPED] {fn.__name__}: {e}")
+        except Exception as e:
+            import traceback
+            print(f"  [ERROR] {fn.__name__}: {type(e).__name__}: {e}")
+            traceback.print_exc()
+    escribir_macros()
+    if WARN:
+        print("\nWarnings:")
+        for w in WARN:
+            print(f"  - {w}")
+
+
+if __name__ == "__main__":
+    main()

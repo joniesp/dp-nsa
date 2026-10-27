@@ -1,0 +1,29 @@
+% ======================================================================
+% TABLA 4
+% Generado por src/generar_tablas.py
+% Fuente: exp2
+% Fecha: 2026-09-08 13:44
+% NO EDITAR A MANO.
+% ======================================================================
+
+\begin{table}[!htbp]
+\centering
+\caption{Ablation of the architecture. Each row reports the difference in AUPRC between a variant and the full model, averaged over the ten datasets, with the win--loss count and the Wilcoxon $p$-value corrected by Holm over the family of 5 comparisons. A positive difference indicates that the variant outperforms the full model. The geometry block uses $K=1$ for both configurations and is corrected separately.}
+\label{tab:ablation}
+\small
+\begin{tabular}{lrrrl}
+\toprule
+\textbf{Variant} & \textbf{$\Delta$ AUPRC} & \textbf{W--L} & \textbf{$p_{\text{Holm}}$} & \textbf{Verdict} \\
+\midrule
+self-only scoring rule & $-0.054$ & 1--9 & 0.029 & Supported \\
+without sample buffer & $-0.013$ & 4--6 & 0.375 & Not established \\
+without polyclonal consensus ($M=1$) & $-0.007$ & 3--7 & 0.098 & Not established \\
+without repulsion ($\lambda{=}0$) & $-0.196$ & 1--9 & 0.016 & Supported \\
+without repulsion and monoclonal & $-0.199$ & 0--10 & 0.010 & Supported \\
+\midrule
+\multicolumn{5}{l}{\textit{Geometry block, $K=1$}} \\
+\midrule
+spherical boundary ($\alpha\to1$) & $-0.094$ & 1--9 & 0.010 & Supported \\
+\bottomrule
+\end{tabular}
+\end{table}

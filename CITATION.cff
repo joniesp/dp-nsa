@@ -1,0 +1,22 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite the article."
+title: "DP-NSA: Deep Polyclonal Immunity"
+version: 1.0.0
+license: MIT
+authors:
+  - family-names: Domínguez
+    given-names: Jonatan
+    affiliation: "Departamento de Sistemas Informáticos, Universidad Politécnica de Madrid"
+  - family-names: Serradilla
+    given-names: Francisco J.
+    affiliation: "Departamento de Sistemas Informáticos, Universidad Politécnica de Madrid"
+preferred-citation:
+  type: article
+  title: "Deep Polyclonal Immunity: Label-Efficient Anomaly Detection through Supervised Geometric Learning"
+  authors:
+    - family-names: Domínguez
+      given-names: Jonatan
+    - family-names: Serradilla
+      given-names: Francisco J.
+  journal: "Neurocomputing"
+  notes: "Submitted"

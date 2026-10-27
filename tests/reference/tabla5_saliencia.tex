@@ -1,0 +1,31 @@
+% ======================================================================
+% TABLA 5
+% Generado por src/generar_tablas.py
+% Fuente: exp9_saliencia_control
+% Fecha: 2026-09-08 13:44
+% NO EDITAR A MANO.
+% ======================================================================
+
+\begin{table}[!htbp]
+\centering
+\caption{Attribution differential on Cardiotocography: mean attribution over anomalous instances minus mean attribution over normal ones, normalized within each instance. A positive value indicates an attribute weighted more heavily when the instance is rejected. The 5 attributes with the largest and smallest differential under the geometric score are shown, with the corresponding values for two alternative attribution methods computed over the same partition.}
+\label{tab:saliency}
+\small
+\begin{tabular}{lrrr}
+\toprule
+\textbf{Variable} & \textbf{DP-NSA} & \textbf{Tabular ResNet} & \textbf{XGBoost (SHAP)} \\
+\midrule
+ASTV & \textbf{$+0.414$} & $+0.384$ & $+0.215$ \\
+ALTV & \textbf{$+0.323$} & $+0.126$ & $+0.056$ \\
+DP & \textbf{$+0.149$} & $+0.168$ & $+0.081$ \\
+Max & \textbf{$+0.037$} & $-0.053$ & $-0.045$ \\
+Variance & \textbf{$+0.020$} & $+0.022$ & $+0.027$ \\
+\midrule
+MLTV & \textbf{$-0.124$} & $-0.046$ & $-0.000$ \\
+Median & \textbf{$-0.132$} & $-0.011$ & $-0.096$ \\
+LB & \textbf{$-0.135$} & $+0.011$ & $+0.013$ \\
+AC & \textbf{$-0.247$} & $-0.584$ & $-0.310$ \\
+Tendency & \textbf{$-0.305$} & $-0.033$ & $-0.005$ \\
+\bottomrule
+\end{tabular}
+\end{table}

@@ -1,0 +1,7 @@
+# Regenerate tables, figures and statistics from results/paper (CPU, no PyTorch)
+numpy==2.1.3
+pandas==2.2.3
+scipy
+scikit-learn==1.6.1
+matplotlib
+pytest

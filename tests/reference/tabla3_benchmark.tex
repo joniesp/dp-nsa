@@ -1,0 +1,52 @@
+% ======================================================================
+% TABLA 3
+% Generado por src/generar_tablas.py
+% Fuente: exp1
+% Fecha: 2026-09-08 13:44
+% NO EDITAR A MANO.
+% ======================================================================
+
+\begin{table}[!htbp]
+\centering
+\caption{Benchmark results. Each cell is the mean over five seeds; the last column reports the mean rank. Best value per column in bold. The contamination rate in the header is that of the test partition. The baseline AUPRC of a random ranker equals $\rho$, so values are not comparable across columns.}
+\label{tab:benchmark}
+\footnotesize
+\setlength{\tabcolsep}{3.2pt}
+\begin{tabular}{lrrrrrrrrrrc}
+\toprule
+ & \textbf{CredC} & \textbf{Sati} & \textbf{Mammo} & \textbf{Musk} & \textbf{Shutt} & \textbf{Annth} & \textbf{Arrhy} & \textbf{Cardio} & \textbf{Iono} & \textbf{ECG} & \textbf{Rank} \\
+$\rho$ (\%) & 0.17 & 1.21 & 2.32 & 3.10 & 7.15 & 7.43 & 14.29 & 22.07 & 35.21 & 41.60 & \\
+\midrule
+\multicolumn{12}{l}{\textit{(a) AUPRC}} \\
+\midrule
+iForest & 0.165 & 0.909 & 0.195 & 0.030 & 0.931 & 0.335 & 0.562 & 0.438 & 0.805 & 0.531 & 8.50 \\
+OCSVM & 0.334 & 0.944 & 0.123 & 0.018 & 0.603 & 0.146 & 0.430 & 0.427 & 0.758 & 0.470 & 9.40 \\
+Contrastive AE & 0.079 & 0.209 & 0.115 & 0.047 & 0.343 & 0.206 & 0.399 & 0.327 & 0.921 & 0.539 & 9.90 \\
+Deep SVDD & 0.530 & 0.930 & 0.195 & 0.090 & 0.979 & 0.323 & 0.439 & 0.621 & 0.937 & 0.823 & 7.40 \\
+Deep MS-SVDD & 0.447 & 0.487 & 0.100 & 0.100 & 0.471 & 0.197 & 0.442 & 0.405 & 0.864 & 0.960 & 9.00 \\
+DevNet & 0.730 & 0.914 & 0.630 & 0.221 & 0.979 & 0.735 & 0.519 & 0.842 & 0.937 & 0.997 & 5.70 \\
+Deep SAD & 0.712 & 0.954 & 0.680 & 0.646 & 0.984 & 0.824 & 0.635 & 0.899 & 0.966 & 0.999 & 3.10 \\
+Tabular ResNet & 0.718 & 0.933 & 0.701 & 0.703 & 0.985 & 0.828 & 0.598 & 0.907 & 0.960 & 0.996 & 3.40 \\
+XGBoost & \textbf{0.862} & 0.931 & 0.688 & \textbf{0.773} & \textbf{0.997} & \textbf{0.942} & 0.613 & \textbf{0.966} & 0.921 & \textbf{0.999} & 2.60 \\
+DP-NSA (self-only) & 0.740 & \textbf{0.965} & 0.635 & 0.488 & 0.982 & 0.391 & 0.547 & 0.842 & 0.955 & 0.997 & 4.40 \\
+DP-NSA & 0.760 & 0.947 & \textbf{0.702} & 0.614 & 0.985 & 0.566 & \textbf{0.640} & 0.894 & \textbf{0.974} & 0.998 & 2.60 \\
+\midrule
+\multicolumn{12}{l}{\textit{(b) AUROC}} \\
+\midrule
+iForest & 0.955 & 0.993 & 0.871 & 0.471 & 0.986 & 0.821 & 0.810 & 0.691 & 0.837 & 0.690 & 7.40 \\
+OCSVM & 0.954 & 0.997 & 0.625 & 0.170 & 0.860 & 0.618 & 0.761 & 0.741 & 0.736 & 0.527 & 9.00 \\
+Contrastive AE & 0.933 & 0.784 & 0.805 & 0.595 & 0.792 & 0.709 & 0.746 & 0.562 & 0.930 & 0.640 & 9.60 \\
+Deep SVDD & 0.951 & 0.994 & 0.769 & 0.597 & 0.989 & 0.738 & 0.747 & 0.794 & 0.950 & 0.866 & 7.50 \\
+Deep MS-SVDD & 0.920 & 0.960 & 0.800 & 0.714 & 0.934 & 0.619 & 0.748 & 0.656 & 0.917 & 0.987 & 8.80 \\
+DevNet & 0.916 & 0.941 & 0.936 & 0.734 & 0.986 & 0.975 & 0.718 & 0.939 & 0.954 & 0.998 & 7.20 \\
+Deep SAD & 0.973 & 0.999 & 0.955 & 0.937 & 0.993 & 0.987 & 0.831 & 0.970 & 0.974 & 0.999 & 3.00 \\
+Tabular ResNet & \textbf{0.979} & 0.992 & \textbf{0.956} & 0.932 & 0.993 & 0.988 & 0.784 & 0.972 & 0.974 & 0.998 & 3.30 \\
+XGBoost & 0.976 & 0.981 & 0.904 & \textbf{0.938} & \textbf{0.999} & \textbf{0.996} & \textbf{0.862} & \textbf{0.989} & 0.937 & \textbf{0.999} & 3.10 \\
+DP-NSA (self-only) & 0.977 & \textbf{0.999} & 0.938 & 0.839 & 0.993 & 0.772 & 0.789 & 0.948 & 0.968 & 0.998 & 4.20 \\
+DP-NSA & 0.978 & 0.997 & 0.939 & 0.909 & 0.994 & 0.880 & 0.834 & 0.964 & \textbf{0.983} & 0.999 & 2.90 \\
+\bottomrule
+\end{tabular}
+
+\vspace{0.4em}
+{\footnotesize Mean standard deviation across seeds (AUPRC): iForest $0.042$, OCSVM $0.035$, Contrastive AE $0.055$, Deep SVDD $0.080$, Deep MS-SVDD $0.083$, DevNet $0.061$, Deep SAD $0.049$, Tabular ResNet $0.046$, XGBoost $0.033$, DP-NSA (self-only) $0.041$, DP-NSA $0.052$.}
+\end{table}
