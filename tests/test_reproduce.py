@@ -22,6 +22,18 @@ FIGURAS = [(4, "label_scarcity"), (5, "repulsion_effect"), (6, "anisotropy_effec
            (7, "granularity_repertoire"), (8, "shrinkage_sensitivity"), (9, "effective_rank")]
 
 
+RESULTADOS = ["exp1_benchmark_results.csv", "exp2_ablacion_results.csv", "exp5_sensibilidad_results.csv",
+              "exp6_escasez_results.csv", "exp7_shrinkage_Arrhythmia.csv", "exp7_shrinkage_CreditCard.csv",
+              "exp7_shrinkage_Mammography.csv", "exp7_shrinkage_Musk.csv", "exp9_tendencia.csv",
+              "exp9_saliencia_control.csv"]
+
+
+def test_released_results_are_present():
+    """The analysis scripts skip missing inputs with a warning, so check them first."""
+    faltan = [f for f in RESULTADOS if not (ROOT / "results" / "paper" / f).exists()]
+    assert not faltan, f"missing in results/paper/: {faltan}"
+
+
 def lineas(p):
     texto = p.read_text(encoding="utf-8").replace("\r", "")
     return [l for l in texto.splitlines() if l.strip() and not l.startswith("%")]
