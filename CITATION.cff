@@ -2,6 +2,7 @@ cff-version: 1.2.0
 message: "If you use this software, please cite the article."
 title: "DP-NSA: Deep Polyclonal Immunity"
 version: 1.0.0
+doi: 10.5281/zenodo.23695241
 license: MIT
 repository-code: "https://github.com/joniesp/dp-nsa"
 authors:

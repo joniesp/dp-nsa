@@ -1,5 +1,7 @@
 # DP-NSA: Deep Polyclonal Immunity
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23695241.svg)](https://doi.org/10.5281/zenodo.23695241)
+
 Code, per-seed results and analysis scripts for
 
 > J. Domínguez, F. J. Serradilla. *Deep Polyclonal Immunity: Label-Efficient Anomaly Detection through Supervised Geometric Learning.* Submitted to *Neurocomputing*.
